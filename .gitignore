@@ -1,3 +1,2 @@
-./artdb/target
-./artdb/target/*
-./artdb/Cargo.lock
+artdb/target
+artdb/target/*
