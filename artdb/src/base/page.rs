@@ -8,7 +8,7 @@ pub struct Entry {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Page {
-    entries: Vec<Entry>,
+    pub entries: Vec<Entry>,
 }
 
 impl Page {
