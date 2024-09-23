@@ -91,7 +91,7 @@ impl BufferPool {
                 }
                 
                 if mut_page.is_dirty == true {
-                    let i_page: Page = deserialize(&buffer_page.data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                    let i_page: Page = deserialize(&mut_page.data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                     engine.write_page(lru_page_id, &i_page)?;
                 }
             }
