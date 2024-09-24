@@ -1,10 +1,14 @@
-use std::fs::{File, OpenOptions, metadata};
+use std::fs::{metadata, File, Metadata, OpenOptions};
 use std::io::{self, Read, Result, Seek, SeekFrom, Write};
 use crate::base::page::Page;
 use bincode::{serialize, deserialize};
 
+const PAGE_SIZE: usize = 4096;
+
+
 pub struct StorageEngine {
     file: File,
+    next_page_id: u64,
 }
 
 impl StorageEngine {
@@ -16,7 +20,20 @@ impl StorageEngine {
             .create(true)
             .open(file_path)?;
 
-        Ok(StorageEngine {file})
+        let meta_data: Metadata = file.metadata()?;
+        let file_size: u64 = meta_data.len();
+        let next_page_id: u64 = file_size / PAGE_SIZE as u64;
+
+        Ok(StorageEngine {
+            file,
+            next_page_id
+        })
+    }
+
+    pub fn allocate_page(&mut self) -> u64 {
+        let page_id: u64 = self.next_page_id;
+        self.next_page_id += 1;
+        page_id
     }
 
     pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<()> {
