@@ -1,2 +1,1 @@
-artdb/target
-artdb/target/*
+artdb/target/**/*
