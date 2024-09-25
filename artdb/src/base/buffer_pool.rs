@@ -5,7 +5,7 @@ use std::cell::RefCell;
 
 use bincode::{deserialize, serialize};
 
-use super::page::{self, Page};
+use super::page::{self, Page, BufferPage};
 use super::storage_engine::StorageEngine;
 
 pub struct BufferPool {
@@ -14,22 +14,6 @@ pub struct BufferPool {
     capacity: usize,
 }
 
-#[derive(Debug)]
-pub struct BufferPage {
-    pub data: Vec<u8>,
-    pub is_dirty: bool,
-    pub is_pinned: bool,
-}
-
-impl BufferPage {
-    pub fn new(data: Vec<u8>) -> Self {
-        BufferPage {
-            data,
-            is_dirty: false,
-            is_pinned: false,
-        }
-    }
-}
 
 impl BufferPool {
     pub fn new(capacity: usize) -> Self {
@@ -49,8 +33,16 @@ impl BufferPool {
         }
 
         // Load the page from disk if it's not in the buffer pool
-        let page = engine.read_page(page_id)?;
-        let buffer_page = Rc::new(RefCell::new(BufferPage::new(serialize(&page).unwrap())));
+        let page = match engine.read_page(page_id) {
+            Ok(page) => page,
+            Err(_) => {
+                let empty_page = Page::new();
+                let _ = engine.write_page(page_id, &empty_page);
+                empty_page
+            }
+        };
+
+        let buffer_page = Rc::new(RefCell::new(BufferPage::new(page)));
 
         // Insert the page into the buffer pool
         self.add_page_to_pool(page_id, Rc::clone(&buffer_page), engine);
@@ -65,6 +57,12 @@ impl BufferPool {
         }
 
         self.usage_queue.push_back(page_id);
+    }
+
+    pub fn mark_page_as_dirty(&mut self, page_id: u64) {
+        if let Some(page) = self.pool.get(&page_id) {
+            page.borrow_mut().is_dirty = true;
+        }
     }
 
     pub fn add_page_to_pool(&mut self, page_id: u64, page: Rc<RefCell<BufferPage>>, engine: &mut StorageEngine) {
@@ -91,8 +89,8 @@ impl BufferPool {
                 }
                 
                 if mut_page.is_dirty == true {
-                    let i_page: Page = deserialize(&mut_page.data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                    engine.write_page(lru_page_id, &i_page)?;
+                    let i_page: &Page = &mut_page.page;
+                    engine.write_page(lru_page_id, i_page)?;
                 }
             }
             return Ok(());
@@ -110,6 +108,16 @@ impl BufferPool {
         if let Some(page) = self.pool.get_mut(&page_id) {
             page.borrow_mut().is_pinned = false;
         }
+    }
+
+    pub fn write_page_to_disk(&mut self, page_id: u64, engine: &mut StorageEngine) -> bool {
+        if let Some(buffer_page) = self.pool.get(&page_id) {
+            let page = &buffer_page.borrow_mut().page;
+            let _ = engine.write_page(page_id, page);
+
+            return true;
+        }
+        false
     }
 
 }

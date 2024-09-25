@@ -1,23 +1,29 @@
-use base::{page::Page, storage_engine::StorageEngine};
+use base::{page::Page, storage_engine::StorageEngine, record::Record};
 use std::fs::metadata;
 
 mod base;
 
 fn main() -> std::io::Result<()> {
-    let file_path = "data.db";
-    let mut engine: StorageEngine = StorageEngine::new(&file_path)?;
-    let mut page: Page = Page::new();
+    let mut engine = StorageEngine::new("data.db")?;
 
-    page.insert(1, "One".to_string());
-    page.insert(2, "Two".to_string());
+    // Create a new Page with some records
+    let mut page = Page::new();
+    page.records.push(Record {
+        id: 1,
+        fields: vec![("name".to_string(), "Alice".to_string())]
+    });
+    page.records.push(Record {
+        id: 2,
+        fields: vec![("name".to_string(), "Bob".to_string())]
+    });
 
-    engine.write_page(0, &page)?;
+    // Write the page to disk
+    let page_id = engine.allocate_page();
+    engine.write_page(page_id, &page)?;
 
-    
-    let read_page = engine.read_page(0)?;
-    for entry in &read_page.entries {
-        println!("Key: {}, Value: {}", entry.key, entry.value);
-    }
+    // Read the page back from disk
+    let read_page = engine.read_page(page_id)?;
+    println!("Read page: {:?}", read_page);
 
     Ok(())
 }

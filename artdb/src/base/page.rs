@@ -2,6 +2,23 @@ use serde::{Serialize, Deserialize};
 
 use super::record::Record;
 
+#[derive(Debug)]
+pub struct BufferPage {
+    pub page: Page,
+    pub is_dirty: bool,
+    pub is_pinned: bool,
+}
+
+impl BufferPage {
+    pub fn new(page: Page) -> Self {
+        BufferPage {
+            page,
+            is_dirty: false,
+            is_pinned: false,
+        }
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Page {

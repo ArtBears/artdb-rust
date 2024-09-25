@@ -52,26 +52,49 @@ impl StorageEngine {
         Ok(buffer)
     }
 
-    pub fn write_page(&mut self, offset: u64, page: &Page) -> Result<()> {
+    pub fn write_page(&mut self, page_id: u64, page: &Page) -> Result<()> {
+        // Step 1: Serialize the Page
         let data = serialize(page).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        let page_size = data.len() as u64;
         
-        // Write the size of the page first (Header)
-        self.write_at(offset, &page_size.to_le_bytes())?;
+        // Step 2: Ensure the serialized page size doesn't exceed PAGE_SIZE
+        if data.len() > PAGE_SIZE {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Serialized page size exceeds PAGE_SIZE"));
+        }
 
-        self.write_at(offset + 8, &data)?;
-        
+        // Step 3: Calculate the offset where the page will be written
+        let offset = page_id * PAGE_SIZE as u64;
+
+        // Step 4: Seek to the correct offset in the file
+        self.file.seek(SeekFrom::Start(offset))?;
+
+        // Step 5: Create a buffer of PAGE_SIZE and fill it with the serialized data
+        let mut buffer = vec![0; PAGE_SIZE];
+        buffer[..data.len()].copy_from_slice(&data);
+
+        // Step 6: Write the buffer to the file
+        self.file.write_all(&buffer)?;
+        self.file.flush()?;  // Flush to ensure data is written to disk
+
+        println!("Page written successfully to offset: {}", offset);  // Debugging line
+
         Ok(())
     }
 
-    pub fn read_page(&mut self, offset: u64) -> Result<Page>{
-        // Read the 8-byte header first
-        let size_buffer = self.read_at(offset, 8)?;
-        let size_array = size_buffer.try_into().map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Failed to convert to array"))?;
-        let page_size = u64::from_le_bytes(size_array);
+    pub fn read_page(&mut self, page_id: u64) -> Result<Page>{
+        let offset = page_id * PAGE_SIZE as u64;
         
-        let data = self.read_at(offset + 8, page_size as usize)?;
-        let page: Page = deserialize(&data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        // Check the file size to see if the page exists
+        let metadata = self.file.metadata()?;
+        let file_size = metadata.len();
+        
+        self.file.seek(SeekFrom::Start(offset))?;
+        
+        // read PAGE_SIZE bytes into a buffer
+        let mut buffer = vec![0;PAGE_SIZE];
+        self.file.read_exact(&mut buffer)?;
+
+        // deserialize the buffer into a Page struct
+        let page:Page = deserialize(&buffer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
         Ok(page)
     }
