@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::record::Record;
 
@@ -19,7 +19,6 @@ impl BufferPage {
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Page {
     pub records: Vec<Record>,
@@ -27,7 +26,9 @@ pub struct Page {
 
 impl Page {
     pub fn new() -> Page {
-        Page { records: Vec::new() }
+        Page {
+            records: Vec::new(),
+        }
     }
 
     pub fn insert(&mut self, record: Record) {
@@ -51,3 +52,4 @@ impl Page {
         self.records.len() < 10
     }
 }
+

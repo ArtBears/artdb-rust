@@ -1,10 +1,11 @@
-use std::fs::{metadata, File, Metadata, OpenOptions};
-use std::io::{self, Read, Result, Seek, SeekFrom, Write};
 use crate::base::page::Page;
-use bincode::{serialize, deserialize};
+use bincode::{deserialize, serialize};
+use std::fs::{metadata, File, Metadata, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+
+use super::error::Error;
 
 const PAGE_SIZE: usize = 4096;
-
 
 pub struct StorageEngine {
     file: File,
@@ -13,7 +14,7 @@ pub struct StorageEngine {
 
 impl StorageEngine {
     // open a file, creating it if it doesn't exist
-    pub fn new(file_path: &str) -> Result<StorageEngine> {
+    pub fn new(file_path: &str) -> Result<StorageEngine, Error> {
         let file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -24,10 +25,7 @@ impl StorageEngine {
         let file_size: u64 = meta_data.len();
         let next_page_id: u64 = file_size / PAGE_SIZE as u64;
 
-        Ok(StorageEngine {
-            file,
-            next_page_id
-        })
+        Ok(StorageEngine { file, next_page_id })
     }
 
     pub fn allocate_page(&mut self) -> u64 {
@@ -36,15 +34,15 @@ impl StorageEngine {
         page_id
     }
 
-    pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<()> {
+    pub fn write_at(&mut self, offset: u64, data: &[u8]) -> Result<(), Error> {
         self.file.seek(SeekFrom::Start(offset))?;
         self.file.write_all(data)?;
         self.file.flush()?;
-        
+
         Ok(())
     }
 
-    pub fn read_at(&mut self, offset: u64, size: usize) -> Result<Vec<u8>> {
+    pub fn read_at(&mut self, offset: u64, size: usize) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![0; size];
         self.file.seek(SeekFrom::Start(offset))?;
         self.file.read_exact(&mut buffer)?;
@@ -52,13 +50,13 @@ impl StorageEngine {
         Ok(buffer)
     }
 
-    pub fn write_page(&mut self, page_id: u64, page: &Page) -> Result<()> {
+    pub fn write_page(&mut self, page_id: u64, page: &Page) -> Result<(), Error> {
         // Step 1: Serialize the Page
-        let data = serialize(page).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        
+        let data = serialize(page)?;
+
         // Step 2: Ensure the serialized page size doesn't exceed PAGE_SIZE
         if data.len() > PAGE_SIZE {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "Serialized page size exceeds PAGE_SIZE"));
+            return Err(Error::PageSizeExceeded(data.len()));
         }
 
         // Step 3: Calculate the offset where the page will be written
@@ -73,29 +71,30 @@ impl StorageEngine {
 
         // Step 6: Write the buffer to the file
         self.file.write_all(&buffer)?;
-        self.file.flush()?;  // Flush to ensure data is written to disk
+        self.file.flush()?; // Flush to ensure data is written to disk
 
-        println!("Page written successfully to offset: {}", offset);  // Debugging line
+        println!("Page written successfully to offset: {}", offset); // Debugging line
 
         Ok(())
     }
 
-    pub fn read_page(&mut self, page_id: u64) -> Result<Page>{
+    pub fn read_page(&mut self, page_id: u64) -> Result<Page, Error> {
         let offset = page_id * PAGE_SIZE as u64;
-        
+
         // Check the file size to see if the page exists
         let metadata = self.file.metadata()?;
         let file_size = metadata.len();
-        
+
         self.file.seek(SeekFrom::Start(offset))?;
-        
+
         // read PAGE_SIZE bytes into a buffer
-        let mut buffer = vec![0;PAGE_SIZE];
+        let mut buffer = vec![0; PAGE_SIZE];
         self.file.read_exact(&mut buffer)?;
 
         // deserialize the buffer into a Page struct
-        let page:Page = deserialize(&buffer).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let page: Page = deserialize(&buffer)?;
 
         Ok(page)
     }
 }
+
